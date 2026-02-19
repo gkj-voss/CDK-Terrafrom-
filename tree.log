@@ -1,0 +1,40 @@
+.
+├── docs
+│   ├── ARCHITECTURE.md
+│   └── archive
+│       └── CDK-to-Terraform-Migration
+│           ├── examples
+│           ├── import.sh
+│           └── README.md
+├── README.md
+├── src
+├── terraform
+│   ├── environments
+│   │   ├── dev
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── variables.tf
+│   │   ├── prod
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── variables.tf
+│   │   └── staging
+│   │       ├── main.tf
+│   │       ├── outputs.tf
+│   │       └── variables.tf
+│   └── modules
+│       ├── compute
+│       │   ├── main.tf
+│       │   ├── outputs.tf
+│       │   └── variables.tf
+│       ├── monitoring
+│       │   ├── main.tf
+│       │   ├── outputs.tf
+│       │   └── variables.tf
+│       └── networking
+│           ├── main.tf
+│           ├── outputs.tf
+│           └── variables.tf
+└── tree.log
+
+15 directories, 23 files

@@ -1,80 +1,20 @@
-# VPC
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
+resource "aws_ecs_cluster" "main" {
+  name = "${var.environment}-${var.cluster_name}"
 
-  tags = {
-    Name        = "${var.environment}-vpc"
-    Environment = var.environment
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
   }
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-${var.cluster_name}"
+  })
 }
 
-# Subnets
-resource "aws_subnet" "public" {
-  count                   = 2
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.${count.index}.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
-}
-
-resource "aws_subnet" "private" {
-  count             = 2
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.${count.index + 10}.0/24"
-  availability_zone = data.aws_availability_zones.available.names[count.index]
-}
-
-# Internet Gateway
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-}
-
-# NAT Gateway
-resource "aws_eip" "nat" {
-  domain = "vpc"
-}
-
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-}
-
-# Route Tables
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
-}
-
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
-  }
-}
-
-resource "aws_route_table_association" "public" {
-  count          = 2
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "private" {
-  count          = 2
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
-}
-
-# Security Groups
 resource "aws_security_group" "alb" {
-  vpc_id = aws_vpc.main.id
+  name        = "${var.environment}-alb-sg"
+  description = "Security group for Application Load Balancer"
+  vpc_id      = var.vpc_id
 
   ingress {
     from_port   = 80
@@ -89,10 +29,16 @@ resource "aws_security_group" "alb" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-alb-sg"
+  })
 }
 
 resource "aws_security_group" "ecs_tasks" {
-  vpc_id = aws_vpc.main.id
+  name        = "${var.environment}-ecs-tasks-sg"
+  description = "Security group for ECS tasks"
+  vpc_id      = var.vpc_id
 
   ingress {
     from_port       = 80
@@ -107,27 +53,49 @@ resource "aws_security_group" "ecs_tasks" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-ecs-tasks-sg"
+  })
 }
 
-# ALB
 resource "aws_lb" "main" {
   name               = "${var.environment}-ecs-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
+  subnets            = var.public_subnet_ids
+
+  enable_deletion_protection = var.enable_deletion_protection
+  enable_http2               = true
+  drop_invalid_header_fields = true
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-ecs-alb"
+  })
 }
 
 resource "aws_lb_target_group" "main" {
   name        = "${var.environment}-ecs-tg"
   port        = 80
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = var.vpc_id
   target_type = "ip"
 
   health_check {
-    path = "/"
+    path                = "/"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = "200-299"
   }
+
+  deregistration_delay = 30
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-ecs-tg"
+  })
 }
 
 resource "aws_lb_listener" "main" {
@@ -141,18 +109,15 @@ resource "aws_lb_listener" "main" {
   }
 }
 
-# ECS Cluster
-resource "aws_ecs_cluster" "main" {
-  name = "${var.environment}-${var.cluster_name}"
-}
-
-# CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/${var.environment}/${var.cluster_name}"
   retention_in_days = var.log_retention_days
+
+  tags = merge(var.tags, {
+    Name = "${var.environment}-ecs-logs"
+  })
 }
 
-# IAM Roles
 resource "aws_iam_role" "ecs_task_execution" {
   name = "${var.environment}-ecs-task-execution-role"
 
@@ -188,7 +153,6 @@ resource "aws_iam_role" "ecs_task" {
   })
 }
 
-# ECS Task Definition
 resource "aws_ecs_task_definition" "main" {
   family                   = "${var.environment}-app"
   network_mode             = "awsvpc"
@@ -216,7 +180,6 @@ resource "aws_ecs_task_definition" "main" {
   }])
 }
 
-# ECS Service
 resource "aws_ecs_service" "main" {
   name            = "app-service"
   cluster         = aws_ecs_cluster.main.id
@@ -224,8 +187,12 @@ resource "aws_ecs_service" "main" {
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+  health_check_grace_period_seconds  = 60
+
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = false
   }
@@ -237,8 +204,8 @@ resource "aws_ecs_service" "main" {
   }
 
   depends_on = [aws_lb_listener.main]
-}
 
-data "aws_availability_zones" "available" {
-  state = "available"
+  tags = merge(var.tags, {
+    Name = "${var.environment}-app-service"
+  })
 }
