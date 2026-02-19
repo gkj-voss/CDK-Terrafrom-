@@ -1,12 +1,25 @@
 variable "environment" {
   description = "Environment name"
   type        = string
+  default     = "staging"
 }
 
 variable "aws_region" {
   description = "AWS region"
   type        = string
   default     = "us-east-1"
+}
+
+variable "vpc_cidr" {
+  description = "VPC CIDR block"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "az_count" {
+  description = "Number of availability zones"
+  type        = number
+  default     = 2
 }
 
 variable "cluster_name" {
@@ -16,13 +29,13 @@ variable "cluster_name" {
 }
 
 variable "container_image" {
-  description = "Docker image to run in the ECS cluster"
+  description = "Docker image"
   type        = string
   default     = "nginx:latest"
 }
 
 variable "desired_count" {
-  description = "Number of tasks to run"
+  description = "Number of tasks"
   type        = number
   default     = 2
 }
@@ -40,7 +53,7 @@ variable "task_memory" {
 }
 
 variable "log_retention_days" {
-  description = "CloudWatch log retention in days"
+  description = "CloudWatch log retention"
   type        = number
-  default     = 7
+  default     = 14
 }
