@@ -1,0 +1,10 @@
+name: testing a pipeline branch 
+
+on: 
+ push: 
+  - devops/**
+ workflow_dispatch: 
+
+jobs: 
+ unit-test: 
+  
