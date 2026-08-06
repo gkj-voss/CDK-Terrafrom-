@@ -1,0 +1,10 @@
+name: pipeline testing 
+
+on: 
+ push: 
+  - devops/**
+  workflow_dispatch: 
+
+jobs: 
+  unit-test: 
+    
